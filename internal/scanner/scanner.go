@@ -15,10 +15,10 @@ type Result struct {
 }
 
 type Scanner struct {
-	IPs        []net.IP
-	Ports      map[int]bool
-	Workers    int
-	Timeout    time.Duration
+	IPs     []net.IP
+	Ports   map[int]bool
+	Workers int
+	Timeout time.Duration
 }
 
 func NewScanner(ips []net.IP, ports []int, workers int, timeout time.Duration) *Scanner {
@@ -55,7 +55,8 @@ func (s *Scanner) Run(ctx context.Context) []*mdns.Device {
 				// Filter services by port range
 				filteredServices := make(map[string]mdns.Service)
 				for k, svc := range device.Services {
-					if s.Ports[svc.Port] || len(s.Ports) == 0 {
+					// Keep if port matches, or if it's a non-port service like device-info (port 0)
+					if s.Ports[svc.Port] || svc.Port == 0 || len(s.Ports) == 0 {
 						filteredServices[k] = svc
 					}
 				}

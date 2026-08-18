@@ -64,7 +64,6 @@ func runScan(cmd *cobra.Command, args []string) {
 }
 
 func printDevice(d *mdns.Device) {
-	fmt.Printf("# Device: %s\n", d.IP)
 	fmt.Println("services:")
 
 	// Sort keys for consistent output
@@ -79,18 +78,22 @@ func printDevice(d *mdns.Device) {
 		fmt.Printf("  %s:\n", k)
 
 		// Instance Name (extracting the prefix)
-		nameParts := strings.Split(svc.Name, ".")
-		name := nameParts[0]
+		// e.g., "slw-nas._http._tcp.local." -> "slw-nas"
+		name := svc.Name
+		parts := strings.Split(svc.Name, "._")
+		if len(parts) > 0 {
+			name = parts[0]
+		}
 		fmt.Printf("    Name=%s\n", name)
 
 		if len(svc.IPv4) > 0 {
-			fmt.Printf("    IPv4=%s\n", strings.Join(svc.IPv4, ","))
+			fmt.Printf("    IPv4=%s\n", svc.IPv4[0])
 		} else {
-			fmt.Printf("    IPv4=%s\n", d.IP) // Fallback to probed IP
+			fmt.Printf("    IPv4=%s\n", d.IP)
 		}
 
 		if len(svc.IPv6) > 0 {
-			fmt.Printf("    IPv6=%s\n", strings.Join(svc.IPv6, ","))
+			fmt.Printf("    IPv6=%s\n", svc.IPv6[0])
 		}
 
 		hostname := strings.TrimSuffix(svc.Hostname, ".")
@@ -124,5 +127,4 @@ func printDevice(d *mdns.Device) {
 			fmt.Printf("      %s\n", ptr)
 		}
 	}
-	fmt.Println()
 }

@@ -76,23 +76,12 @@ func (p *Prober) Probe(ctx context.Context, targetIP string) (*Device, error) {
 
 	// 2. For each service type, find instances and their details
 	for _, st := range serviceTypes {
+		device.Answers["PTR"] = append(device.Answers["PTR"], strings.TrimSuffix(st, "."))
 		p.queryServiceDetails(targetIP, st, device)
 	}
 
 	if len(device.Services) == 0 {
 		return nil, nil
-	}
-
-	// Add unique PTRs to answers
-	ptrSet := make(map[string]bool)
-	for _, svc := range device.Services {
-		parts := strings.SplitN(svc.Name, ".", 2)
-		if len(parts) == 2 {
-			ptrSet[parts[1]] = true
-		}
-	}
-	for ptr := range ptrSet {
-		device.Answers["PTR"] = append(device.Answers["PTR"], ptr)
 	}
 
 	return device, nil
@@ -169,19 +158,26 @@ func (p *Prober) resolveInstance(targetIP, instanceName string, device *Device) 
 		}
 	}
 
-	if svc.Port == 0 && svc.Hostname == "" {
+	if svc.Port == 0 && !strings.Contains(instanceName, "device-info") && len(svc.Banner) == 0 {
 		return // Didn't get enough info
 	}
 
 	// Identify protocol/service type from instance name
 	// e.g., "slw-nas._http._tcp.local." -> "http", "tcp"
 	parts := strings.Split(instanceName, ".")
+	var key string
 	if len(parts) >= 3 {
 		svc.Service = strings.TrimPrefix(parts[1], "_")
 		svc.Protocol = strings.TrimPrefix(parts[2], "_")
+		if svc.Port > 0 {
+			key = fmt.Sprintf("%d/%s %s", svc.Port, svc.Protocol, svc.Service)
+		} else {
+			key = svc.Service
+		}
+	} else {
+		key = instanceName
 	}
 
-	key := fmt.Sprintf("%d/%s %s", svc.Port, svc.Protocol, svc.Service)
 	device.Services[key] = svc
 }
 
@@ -193,11 +189,16 @@ func (p *Prober) parseRecord(rec dns.RR, svc *Service) {
 		svc.TTL = r.Hdr.Ttl
 	case *dns.TXT:
 		for _, txt := range r.Txt {
-			parts := strings.SplitN(txt, "=", 2)
-			if len(parts) == 2 {
-				svc.Banner[parts[0]] = parts[1]
-			} else if len(parts) == 1 && parts[0] != "" {
-				svc.Banner[parts[0]] = ""
+			// Deep banner recognition: handle comma separated key=value pairs
+			// common in qdiscover and other services
+			items := strings.Split(txt, ",")
+			for _, item := range items {
+				parts := strings.SplitN(item, "=", 2)
+				if len(parts) == 2 {
+					svc.Banner[parts[0]] = parts[1]
+				} else if len(parts) == 1 && parts[0] != "" {
+					svc.Banner[parts[0]] = ""
+				}
 			}
 		}
 	case *dns.A:
